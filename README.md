@@ -12,7 +12,7 @@ I also see that many from a more machine learning background tend to stick with 
 
 # Dataset
 
-As implied before, I used the `nba_api ` library to query data for this project. I used the game logs for every player who played during the 2023-2024 season via the  `LeagueGameLog` endpoint. This gave me 26,401 observation of 572 players and 1230 games.
+As implied before, I used the `nba_api ` library to query data for this project. I used the game logs for every player who played during the 2023-2024 season via the  `LeagueGameLog` endpoint. This gave me 26,401 observation of 572 players and 1,230 games.
 
 # Feature Engineering
 
