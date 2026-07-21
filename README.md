@@ -1,6 +1,6 @@
 # Overview 
 
-This project predicts the number of points an NBA player will score in their next game using only information that would be available prior to tip-off. Classical statistical and machine learning models are compared while adhering to proper time-series validation. Several predictive features are engineered to improve model generalization.
+The chief objective of this project is to predict the number of points an NBA player will score in their next game using only information that would be available prior to tip-off. Classical statistical and machine learning models are compared while adhering to proper time-series validation. Several predictive features are engineered to improve model generalization.
 
 # Motivation 
 
@@ -12,11 +12,13 @@ I also see that many from a more machine learning background tend to stick with 
 
 # Dataset
 
-As implied before, I used the `nba_api ` library to query data for this project. I used the game logs for every player who played during the 2023-2024 season via the  `LeagueGameLog` endpoint. This gave me 26,401 observation of 572 players and 1230 games.
+As implied before, I used the `nba_api` library to query data for this project. I used the game logs for every player who played during the 2023-2024 season via the  `LeagueGameLog` endpoint. This gave me 26,401 observations of 572 players and 1230 games. The `PTS` column is the **response** variable.
 
-# Feature Engineering
+# Feature Engineering/Data Handling
 
 The dataset itself did not come with many features that could support my predictive goals.  This data is sequenced and there is a temporal constraint in that I can't use information that is derived from games that already happened. Doing so would cause data leakage and would lead to spurious predictions informed by data that does not yet exist. For that reason, many of the original features were not used in the models. To prevent temporal leakage, each player's games were sorted chronologically, with the first 80% used for training and the remaining 20% reserved for testing.
+
+
 
 However, there was enough information to engineer features that are defensible and most importantly would be available prior to a given upcoming game. The engineered features were:
 
@@ -36,47 +38,63 @@ I used linear regression because it is very simple, ubiquitous, interpretable ou
 
 At first, I wanted to used Poisson regression as another model since the data the number of points $\in \mathbf{N_0}$ that is, nonnegative integer-valued counts. This mirrors the support for the ${Poisson}(\lambda)$ distribution so I thought that would be a good model to try. However, I investigated further and saw that the points column was **overdispersed** meaning that its variance of the number points (81.32 points^2 )  is very high relative to its mean (10.91 points). This is a direct violation of assuming a Poisson distribution for the count of points made by a player because the distribution assumes that $Mean = \lambda = Variance$ which means it doesn't have enough parameters to be flexible. 
 
-I needed a more flexible and overdispersed substitute for Poisson regression and decided on negative binomial regression. The Negative Binomial distribution may be viewed as a Gamma-Poisson mixture, allowing it to naturally model overdispersed count data. and  does not have the "equi-dispersed" assumption like before because the parameter $\lambda$ is now itself treated as a random value drawn from the Gamma distribution and the mean and variance are no longer forced to be equal.
+I needed a more flexible and overdispersed substitute for Poisson regression and decided on negative binomial regression. The Negative Binomial distribution may be viewed as a Gamma-Poisson mixture, allowing it to naturally model overdispersed count data and does not have the "equi-dispersed" assumption like before because the parameter $\lambda$ is now itself treated as a random value drawn from the Gamma distribution and the mean and variance are no longer forced to be equal.
 
 
-# Conclusion/Results
+# Model Evaluation
+ 
+ I used RMSE because it is always in the unit of the response variable and is more immediately interpretable due to this. However, RMSE is more sensitive to outliers given that there is squaring involved. MAE is more robust to outliers as it treats all errors linearly as opposed to quadratically. Also given that the points data is overdispersed and has heavier tails, using MAE may help to offset this.
+ 
+**All reported evaluation metrics are computed on the held-out test set unless otherwise specified.** Each player's first 80% of chronologically ordered games were used for training and the remaining 20% for testing.
 
-Here is a table of the performance metrics for each model. I used RMSE because it is always in the unit of the response variable and is more immediately interpretable due to this. However, RMSE is more sensitive to outliers given that there is squaring involved. MAE is more robust to outliers as it treats all errors linearly as opposed to quadratically. Also given that the points data is overdispersed and has heavier tails, using MAE may help to offset this.
+OLS
+- Library: `sklearn`
+- Features: Previous Game Points, Rolling Average, Rest Days, Opponent, Home/Away
+- Categorical encoding: One-hot encoding
+ Random Forest: 
+ - Library: `sklearn`
+ - Hyperparameter(s): 300 estimators (hyperparameter tuning was intentionally left for future work.)
+ - Features: Previous Game Points, Rolling Average, Rest Days, Opponent, Home/Away
+ - Categorical encoding: One-hot encoding
+  	 
+ Negative Binomial Regression: 
+- Library: `statsmodels`
+- Hyperparameter(s): Dispersion parameter (α) estimated via maximum likelihood using the discrete Negative Binomial model prior to fitting the GLM.
+ - Features: Previous Game Points, Rolling Average, Rest Days, Opponent, Home/Away
+ - Categorical encoding: One-hot encoding
 
-| Model             | RMSE     | MAE      | R²       | Notes               |
-| ----------------- | -------- | -------- | -------- | ------------------- |
-| League Mean       | 8.99     | 7.20     | N/A      | Constant prediction |
-| Player Mean       | 6.53     | 4.99     | N/A      | Historical average  |
-| OLS               | **5.16** | 3.91     | **0.67** | Best generalization |
-| Negative Binomial | 7.29     | 4.84     | 0.34     | Count-data GLM      |
-| Random Forest     | 5.21     | **3.49** | 0.66     | Comparable to OLS   |
+### Baseline Performance Metrics on the Test Set
 
-OLS achieved the best overall predictive performance. The Random Forest achieved comparable predictive performance but it wasn't much different from the OLS model which is a simpler model. Feature importance analysis showed that the rolling 5-game average accounted for approximately 96% of the Random Forest's predictive importance. For the other two models, the rolling 5-game average was the highest coefficient showing that it was overall the feature that yielded the most amount of signal compared to the others. Despite being statistically justified, the negative binomial regression model did not outperform the other two models but all of the models outperformed the baselines.
+| Model       | RMSE | MAE  |
+| ----------- | ---- | ---- |
+| League Mean | 8.99 | 7.20 |
+| Player Mean | 6.53 | 4.99 |
 
-Overall, the results suggest that feature engineering contributed more to predictive performance than model complexity. The relatively simple OLS model generalized slightly better than the more flexible Random Forest, while all fitted models substantially outperformed the naïve baselines.
+
+### Out-of-Sample Performance Metrics on the Test Set
+
+| Model             | RMSE     | MAE      | R²       | Notes                |
+| ----------------- | -------- | -------- | -------- | -------------------- |
+| OLS               | **5.16** | 3.91     | **0.67** | Best generalization. |
+| Negative Binomial | 7.29     | 4.84     | 0.34     |                      |
+| Random Forest     | 5.21     | **3.49** | 0.66     | Comparable to OLS.   |
+
+### In-Sample Performance Metrics on the Training Set
+
+| Model             | RMSE     | MAE      | R²       |
+| ----------------- | -------- | -------- | -------- |
+| OLS               | 4.94     | 3.74     | 0.70     |
+| Negative Binomial | 7.73     | 4.77     | 0.27     |
+| Random Forest     | **4.80** | **3.64** | **0.72** |
+
+Despite being the simplest predictive model evaluated, OLS achieved the best overall out-of-sample performance. The Random Forest achieved comparable predictive performance and does not justify the added complexity in the current feature set. Feature importance analysis showed that the rolling 5-game average accounted for approximately 96% of the Random Forest's predictive importance. Similarly, the rolling 5-game average was the greatest coefficient for both linear models.  Despite being statistically justified, the negative binomial regression model did not outperform the other two models however, all of the models outperformed the baselines. Overall, the results suggest that feature engineering contributed more to predictive performance than model complexity.
 
 # Future Ideas
 
-There were quiet a lot ideas I forewent out for brevity's sake and wanting to have something complete. Here are some ideas that I may implement later for this project:
+There were quite a lot ideas I forewent out for brevity's sake and wanting to have something complete. Here are some ideas that I may implement later for this project:
 
 - **Engineer richer contextual features** – The results suggest that additional predictive performance is more likely to come from improved feature engineering than from increasingly complex models. Potential additions include opponent defensive statistics, player usage rate, expected minutes, team pace, betting lines, injury reports, and other game-level context obtained by joining additional datasets.
 - **Improve the representation of recent player form** – Replace the simple 5-game rolling average with an exponentially weighted moving average (EWMA) or a Kalman filter. Both approaches adapt more naturally to changes in player performance by assigning greater weight to recent observations while retaining historical information.
 - **Evaluate additional machine learning models** – Compare the current models with more advanced tree-based and sequential learning methods such as **XGBoost**, **LightGBM**, and, if additional data are available, **LSTMs** for modeling temporal dependencies.
 - **Investigate additional statistical models** – Explore count-data models including the **Beta-Negative Binomial**, and hierarchical (mixed-effects) models to better account for overdispersion, and player-specific effects.
 - **Improve project engineering** – Develop an automated data ingestion pipeline, improve project modularity, and build an interactive dashboard (e.g., Tableau) for model exploration and visualization.
-
-# Repository Structure
-
-NBA_Point_Prediction/
-│
-├── data/
-├── notebooks/
-├── README.md
-├── requirements.txt
-
-
-# Installation
-
-git clone ...
-
-pip install -r requirements.txt
